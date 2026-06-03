@@ -31,7 +31,7 @@ export default function LandingPage() {
       <section className="col reveal" style={{ maxWidth: 540, padding: '40px 0 100px', textAlign: 'center' }}>
         <h1 className="t-display">
           Get hired as a PM through real work,{' '}
-          <span className="sans" style={{ fontWeight: 500 }}>
+          <span className="sans" style={{ fontWeight: 700 }}>
             not résumés.
           </span>
         </h1>

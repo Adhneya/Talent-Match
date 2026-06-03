@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from '@/context/FormContext';
 import { COMPANIES, type Company } from '@/lib/companies';
-import { Heart, Cross, Cards, MapPin, Users, Spark } from '@/components/Icons';
+import { Heart, Cards, MapPin, Users, Spark, Tick } from '@/components/Icons';
 import ChatModal from '@/components/ChatModal';
 import { useChat } from '@/hooks/useChat';
 
@@ -12,6 +12,7 @@ type Tab = 'swipe' | 'matches';
 export default function DiscoverPage() {
   const { liked, passed, update } = useForm();
   const [tab, setTab] = useState<Tab>('swipe');
+  const [matchOf, setMatchOf] = useState<Company | null>(null);
   const { peer, messages, openChat, closeChat, send } = useChat();
 
   const deck = useMemo(
@@ -22,8 +23,12 @@ export default function DiscoverPage() {
 
   function decide(action: 'like' | 'pass') {
     if (!current) return;
-    if (action === 'like') update({ liked: [...liked, current.id] });
-    else update({ passed: [...passed, current.id] });
+    if (action === 'like') {
+      update({ liked: [...liked, current.id] });
+      setMatchOf(current); // celebrate the match before the next card
+    } else {
+      update({ passed: [...passed, current.id] });
+    }
   }
 
   const matched = COMPANIES.filter((c) => liked.includes(c.id));
@@ -36,8 +41,10 @@ export default function DiscoverPage() {
         </h1>
 
         {tab === 'swipe' ? (
-          current ? (
-            <SwipeCard key={current.id} company={current} onDecide={decide} />
+          matchOf ? (
+            <MatchScreen company={matchOf} onNext={() => setMatchOf(null)} />
+          ) : current ? (
+            <SwipeDeck company={current} onDecide={decide} />
           ) : (
             <EmptyDeck count={matched.length} onSeeMatches={() => setTab('matches')} />
           )
@@ -57,15 +64,38 @@ export default function DiscoverPage() {
   );
 }
 
-const SWIPE_THRESHOLD = 110; // px past which a release commits
-const FLY_OUT = 600; // px the card travels off-screen
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReduced(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return reduced;
+}
 
-function SwipeCard({ company, onDecide }: { company: Company; onDecide: (a: 'like' | 'pass') => void }) {
+function SwipeDeck({ company, onDecide }: { company: Company; onDecide: (a: 'like' | 'pass') => void }) {
+  const reduced = useReducedMotion();
   const [dx, setDx] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [exit, setExit] = useState<null | 'like' | 'pass'>(null);
+  const deckRef = useRef<HTMLDivElement | null>(null);
   const startX = useRef(0);
+  const lastX = useRef(0);
+  const lastT = useRef(0);
+  const vel = useRef(0);
   const decided = useRef(false);
+
+  // New card → reset swipe state (deck + buttons stay mounted/focusable).
+  useEffect(() => {
+    setDx(0);
+    setDragging(false);
+    setExit(null);
+    decided.current = false;
+    vel.current = 0;
+  }, [company.id]);
 
   const commit = (action: 'like' | 'pass') => {
     if (exit || decided.current) return;
@@ -73,7 +103,7 @@ function SwipeCard({ company, onDecide }: { company: Company; onDecide: (a: 'lik
     setExit(action);
   };
 
-  // Desktop keyboard support: ← pass, → match.
+  // Keyboard: ← pass, → interested (the buttons are focusable too).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'ArrowLeft') commit('pass');
@@ -89,183 +119,175 @@ function SwipeCard({ company, onDecide }: { company: Company; onDecide: (a: 'lik
     if ((e.target as HTMLElement).closest('button')) return; // let buttons fire their own click
     setDragging(true);
     startX.current = e.clientX;
+    lastX.current = e.clientX;
+    lastT.current = e.timeStamp;
+    vel.current = 0;
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
   }
   function onPointerMove(e: React.PointerEvent) {
     if (!dragging) return;
+    const dt = e.timeStamp - lastT.current;
+    if (dt > 0) vel.current = (e.clientX - lastX.current) / dt;
+    lastX.current = e.clientX;
+    lastT.current = e.timeStamp;
     setDx(e.clientX - startX.current);
   }
   function onPointerUp() {
     if (!dragging) return;
     setDragging(false);
-    if (dx > SWIPE_THRESHOLD) commit('like');
-    else if (dx < -SWIPE_THRESHOLD) commit('pass');
-    else setDx(0); // spring back
+    const width = deckRef.current?.offsetWidth ?? 320;
+    const dist = width * 0.35; // 35% of card width
+    const fast = Math.abs(vel.current) > 0.6; // px/ms — velocity-based commit
+    if (dx > dist || (fast && vel.current > 0)) commit('like');
+    else if (dx < -dist || (fast && vel.current < 0)) commit('pass');
+    else setDx(0); // spring back to center
   }
 
   function onTransitionEnd(e: React.TransitionEvent) {
-    if (exit && !decided.current && e.propertyName === 'transform') {
+    const finished = e.propertyName === 'transform' || (reduced && e.propertyName === 'opacity');
+    if (exit && !decided.current && finished) {
       decided.current = true;
       onDecide(exit);
     }
   }
 
-  const tx = exit ? (exit === 'like' ? FLY_OUT : -FLY_OUT) : dx;
-  const rot = Math.max(-14, Math.min(14, tx * 0.05));
-  const opacity = exit ? 0 : 1 - Math.min(Math.abs(dx) / (FLY_OUT * 1.4), 0.25);
+  const width = deckRef.current?.offsetWidth ?? 320;
+  const dir = exit === 'like' ? 1 : exit === 'pass' ? -1 : 0;
+  const rot = reduced ? 0 : Math.max(-12, Math.min(12, dx * 0.05));
+
+  const transform = exit
+    ? reduced
+      ? 'translateX(0) rotate(0deg)'
+      : `translateX(${dir * 110}%) rotate(${dir * 10}deg)`
+    : `translateX(${dx}px) rotate(${rot}deg)`;
+  const opacity = exit ? 0 : 1 - Math.min(Math.abs(dx) / width, 1) * 0.85;
   const transition = dragging
     ? 'none'
-    : 'transform 360ms cubic-bezier(0.22,0.61,0.36,1), opacity 360ms ease';
+    : exit
+      ? reduced
+        ? 'opacity 180ms ease'
+        : 'transform 350ms cubic-bezier(0.4,0,0.2,1), opacity 320ms ease'
+      : 'transform 300ms cubic-bezier(0.22,0.61,0.36,1), opacity 200ms ease';
 
-  const likeOpacity = Math.max(0, Math.min(1, dx / SWIPE_THRESHOLD));
-  const passOpacity = Math.max(0, Math.min(1, -dx / SWIPE_THRESHOLD));
+  // Directional drag cue (subtle tint): green = interested, grey = pass.
+  const cue = Math.min(Math.abs(dx) / (width * 0.35), 1) * 0.16;
+  const tint = dx > 4 ? `rgba(22,163,74,${cue})` : dx < -4 ? `rgba(7,11,22,${cue})` : 'transparent';
+
+  // Borderless while in motion (drag / fly-out); bordered card only at rest.
+  const moving = dragging || exit !== null;
 
   return (
-    <div
-      className={exit ? 'card' : 'card reveal'}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onTransitionEnd={onTransitionEnd}
-      style={{
-        position: 'relative',
-        padding: '34px 34px 26px',
-        transform: `translateX(${tx}px) rotate(${rot}deg)`,
-        opacity,
-        transition,
-        cursor: dragging ? 'grabbing' : 'grab',
-        touchAction: 'pan-y',
-        userSelect: 'none',
-        willChange: 'transform',
-      }}
-    >
-      {/* Drag overlays */}
-      <SwipeBadge label="MATCH" tone="like" opacity={exit === 'like' ? 1 : likeOpacity} side="left" />
-      <SwipeBadge label="PASS" tone="pass" opacity={exit === 'pass' ? 1 : passOpacity} side="right" />
+    <div>
+      <div className="stage" ref={deckRef}>
+        <div key={company.id} className="stage__enter">
+          <div
+            className="stage__card card"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            onTransitionEnd={onTransitionEnd}
+            style={{
+              transform,
+              opacity,
+              transition,
+              cursor: dragging ? 'grabbing' : 'grab',
+              border: moving ? '1px solid transparent' : undefined,
+              boxShadow: moving ? 'none' : undefined,
+            }}
+          >
+            <h2 className="t-h1">{company.name}</h2>
+            <p className="t-lead" style={{ marginTop: 6 }}>
+              {company.tagline}
+            </p>
 
-      <h2 className="t-h1">{company.name}</h2>
-      <p className="t-lead" style={{ marginTop: 6 }}>
-        {company.tagline}
-      </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 22 }}>
+              <span className="pill">
+                <MapPin /> {company.location}
+              </span>
+              <span className="pill">
+                <Users /> {company.size}
+              </span>
+              <span className="pill">
+                <Spark /> {company.stage}
+              </span>
+            </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 22 }}>
-        <span className="pill">
-          <MapPin /> {company.location}
-        </span>
-        <span className="pill">
-          <Users /> {company.size}
-        </span>
-        <span className="pill">
-          <Spark /> {company.stage}
-        </span>
+            <div
+              style={{
+                marginTop: 22,
+                padding: '18px 22px',
+                borderRadius: 14,
+                background: 'var(--accent-tint)',
+                border: '1px solid var(--accent-line)',
+              }}
+            >
+              <span style={{ fontSize: '1.12rem', fontWeight: 700, color: 'var(--accent-ink)' }}>{company.trial}</span>
+            </div>
+
+            <p className="t-body t-muted" style={{ marginTop: 22 }}>
+              {company.brief}
+            </p>
+
+            {/* Directional drag cue */}
+            <div className="stage__tint" style={{ background: tint }} aria-hidden="true" />
+          </div>
+        </div>
       </div>
+
+      <div className="stage__actions">
+        <button className="btn btn--neutral btn--lg" onClick={() => commit('pass')}>
+          Pass
+        </button>
+        <button className="btn btn--primary btn--lg" onClick={() => commit('like')}>
+          Interested →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── "It's a match" interstitial (after a right swipe / like) ── */
+function MatchScreen({ company, onNext }: { company: Company; onNext: () => void }) {
+  return (
+    <div className="card reveal" style={{ padding: '44px 36px 36px', textAlign: 'center' }}>
+      <span className="eyebrow" style={{ color: 'var(--accent-ink)' }}>
+        It’s a match
+      </span>
 
       <div
         style={{
-          marginTop: 22,
-          padding: '18px 22px',
-          borderRadius: 14,
-          background: 'var(--accent-tint)',
-          border: '1px solid var(--accent-line)',
+          width: 76,
+          height: 76,
+          margin: '22px auto 24px',
+          borderRadius: '50%',
+          background: '#16a34a',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 16px 36px -16px rgba(22,163,74,0.6)',
+          animation: 'popIn 0.42s cubic-bezier(0.22,1.2,0.36,1) both',
         }}
       >
-        <span style={{ fontSize: '1.12rem', fontWeight: 700, color: 'var(--accent-ink)' }}>{company.trial}</span>
+        <Tick size={36} style={{ color: '#fff' }} />
       </div>
 
-      <p className="t-body t-muted" style={{ marginTop: 22 }}>
-        {company.brief}
-      </p>
+      <h2 className="t-h2">{company.name} is interested too</h2>
 
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 28, marginTop: 30 }}>
-        <RoundBtn label="Pass" variant="pass" onClick={() => commit('pass')}>
-          <Cross />
-        </RoundBtn>
-        <RoundBtn label="Like" variant="like" onClick={() => commit('like')}>
-          <Heart size={26} />
-        </RoundBtn>
+      <div style={{ textAlign: 'left', marginTop: 26 }}>
+        <span className="eyebrow" style={{ color: 'var(--accent-ink)' }}>
+          Why this matched
+        </span>
+        <p className="t-body t-muted" style={{ marginTop: 10 }}>
+          Your work maps straight onto {company.name}’s roadmap, and interest is high on both
+          sides — so we’ve turned this into a {company.trial}, skipping the interview loop.
+        </p>
       </div>
 
-      <p className="t-fine" style={{ textAlign: 'center', marginTop: 16, color: 'var(--faint)' }}>
-        Swipe or drag · ← pass · → match
-      </p>
+      <button className="btn btn--primary btn--lg btn--block" style={{ marginTop: 30 }} onClick={onNext}>
+        See next role →
+      </button>
     </div>
-  );
-}
-
-function SwipeBadge({
-  label,
-  tone,
-  opacity,
-  side,
-}: {
-  label: string;
-  tone: 'like' | 'pass';
-  opacity: number;
-  side: 'left' | 'right';
-}) {
-  const like = tone === 'like';
-  return (
-    <div
-      aria-hidden="true"
-      style={{
-        position: 'absolute',
-        top: 24,
-        left: side === 'left' ? 24 : undefined,
-        right: side === 'right' ? 24 : undefined,
-        padding: '6px 14px',
-        borderRadius: 8,
-        border: `2.5px solid ${like ? 'var(--accent-ink)' : 'var(--danger)'}`,
-        color: like ? 'var(--accent-ink)' : 'var(--danger)',
-        fontWeight: 800,
-        fontSize: '1.1rem',
-        letterSpacing: '0.08em',
-        transform: `rotate(${like ? -12 : 12}deg)`,
-        opacity,
-        transition: 'opacity 120ms ease',
-        pointerEvents: 'none',
-        background: 'rgba(255,255,255,0.7)',
-      }}
-    >
-      {label}
-    </div>
-  );
-}
-
-function RoundBtn({
-  children,
-  label,
-  variant,
-  onClick,
-}: {
-  children: React.ReactNode;
-  label: string;
-  variant: 'pass' | 'like';
-  onClick: () => void;
-}) {
-  const like = variant === 'like';
-  return (
-    <button
-      aria-label={label}
-      onClick={onClick}
-      style={{
-        width: 62,
-        height: 62,
-        borderRadius: '50%',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        border: like ? 'none' : '1.5px solid var(--hairline)',
-        background: like ? 'var(--accent-ink)' : 'rgba(26,26,26,0.04)',
-        color: like ? '#fff' : 'var(--muted)',
-        transition: 'transform 160ms ease',
-      }}
-      onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.92)')}
-      onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-      onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-    >
-      {children}
-    </button>
   );
 }
 

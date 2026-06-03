@@ -90,8 +90,10 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+html,
 body {
-  overflow-x: hidden;
+  overflow-x: hidden; /* a translating swipe card can never scroll the page */
+  max-width: 100%;
 }
 
 .hdr,
@@ -471,6 +473,65 @@ h3 {
   width: 100%;
 }
 
+/* ── Swipe area (EDGE-FREE: no clipping container) ───────────────
+   The card drags and flies out freely with no edge cutting it.
+   html/body { overflow-x: hidden } is the only guard — it stops a
+   horizontal scrollbar without putting a visible edge on the card. */
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+}
+.stage__enter {
+  animation: cardIn 280ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.stage__card {
+  position: relative;
+  padding: 30px 30px 26px;
+  touch-action: pan-y; /* keep vertical page scroll, capture horizontal drag */
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform;
+}
+.stage__tint {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-card);
+  pointer-events: none;
+  transition: background 80ms linear;
+}
+.stage__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  max-width: 440px;
+  margin: 16px auto 0;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage__enter {
+    animation: fadeIn 1ms both; /* fade only, no scale */
+  }
+}
+
 /* ── Chat ───────────────────────────────────────────────────── */
 .chat-scrim {
   position: fixed;
@@ -670,5 +731,15 @@ h3 {
       opacity: 1;
       transform: translateY(0);
     }
+  }
+}
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
