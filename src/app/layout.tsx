@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Newsreader } from 'next/font/google';
 import './globals.css';
 import { FormProvider } from '@/context/FormContext';
@@ -34,6 +34,12 @@ export const metadata: Metadata = {
   title: 'TalentMatch — Get hired through real work',
   description:
     'Swipe on companies. Match. Do a paid trial. Get the job — no résumés.',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({

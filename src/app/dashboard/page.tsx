@@ -11,6 +11,8 @@ import {
   type TrialStatus,
 } from '@/lib/candidates';
 import { Heart, Cross } from '@/components/Icons';
+import ChatModal from '@/components/ChatModal';
+import { useChat } from '@/hooks/useChat';
 
 type Tab = 'review' | 'matches' | 'trials';
 
@@ -20,10 +22,17 @@ export default function DashboardPage() {
   const [matches, setMatches] = useState<MatchedCandidate[]>(MATCHED_CANDIDATES);
   const [toast, setToast] = useState<string | null>(null);
   const [profile, setProfile] = useState<ReviewCandidate | null>(null);
+  const { peer, messages, openChat, closeChat, send } = useChat();
 
   function flash(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 2400);
+  }
+
+  // Reload the review queue (brings back passed candidates not yet matched).
+  function refresh() {
+    setReview(REVIEW_CANDIDATES.filter((c) => !matches.some((m) => m.id === c.id)));
+    flash('Refreshed — candidates reloaded');
   }
 
   function pass(id: string) {
@@ -60,14 +69,14 @@ export default function DashboardPage() {
     <main className="wrap" style={{ paddingBottom: 120 }}>
       <section className="col" style={{ maxWidth: 600, padding: '14px 0 40px' }}>
         {/* Title row */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div>
             <h1 className="t-h1">Company Dashboard</h1>
             <p className="t-body t-muted" style={{ marginTop: 8, maxWidth: '34ch' }}>
               Review interested candidates, match, and invite them to a trial.
             </p>
           </div>
-          <button className="btn btn--ghost" onClick={() => flash('Refreshed')}>
+          <button className="btn btn--ghost" onClick={refresh}>
             Refresh
           </button>
         </div>
@@ -99,7 +108,12 @@ export default function DashboardPage() {
           {tab === 'matches' &&
             (matches.length ? (
               matches.map((c) => (
-                <MatchCard key={c.id} c={c} onChat={() => flash(`Opening chat with ${c.name}…`)} onInvite={() => sendInvite(c.id, c.name)} />
+                <MatchCard
+                  key={c.id}
+                  c={c}
+                  onChat={() => openChat({ id: c.id, name: c.name, subtitle: c.tagline })}
+                  onInvite={() => sendInvite(c.id, c.name)}
+                />
               ))
             ) : (
               <Empty title="No matches yet." sub="Match a candidate in the Review tab to begin." />
@@ -107,7 +121,9 @@ export default function DashboardPage() {
 
           {tab === 'trials' &&
             (trials.length ? (
-              trials.map((c) => <TrialCard key={c.id} c={c} onChat={() => flash(`Opening chat with ${c.name}…`)} />)
+              trials.map((c) => (
+                <TrialCard key={c.id} c={c} onChat={() => openChat({ id: c.id, name: c.name, subtitle: c.tagline })} />
+              ))
             ) : (
               <Empty title="No active trials." sub="Send a trial invite from the Matches tab." />
             ))}
@@ -115,6 +131,8 @@ export default function DashboardPage() {
       </section>
 
       {profile && <ProfileDrawer c={profile} onClose={() => setProfile(null)} onMatch={() => match(profile)} />}
+
+      <ChatModal peer={peer} messages={messages} onSend={send} onClose={closeChat} />
 
       {toast && (
         <div
@@ -168,7 +186,7 @@ function ReviewCard({
   const top = c.skillsMatch >= 70;
   return (
     <div className="card" style={{ padding: '24px 26px 22px', borderColor: top ? 'var(--accent-line)' : undefined }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
         <div>
           {top && (
             <span className="pill pill--match" style={{ fontSize: '0.74rem', padding: '4px 10px', marginBottom: 10 }}>
@@ -219,7 +237,7 @@ function ReviewCard({
         </span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16 }}>
+      <div className="btn-row" style={{ marginTop: 16 }}>
         <button className="btn btn--neutral" onClick={onPass}>
           Pass
         </button>
@@ -251,7 +269,7 @@ function MatchCard({ c, onChat, onInvite }: { c: MatchedCandidate; onChat: () =>
   const invited = c.trial !== 'none';
   return (
     <div className="card" style={{ padding: '24px 26px 22px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
         <div>
           <h3 className="t-h3">{c.name}</h3>
           <p className="t-body t-muted" style={{ marginTop: 6, maxWidth: '30ch' }}>
@@ -261,7 +279,7 @@ function MatchCard({ c, onChat, onInvite }: { c: MatchedCandidate; onChat: () =>
         {invited && <StatusChip status={c.trial} prefix="Trial: " />}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 20 }}>
+      <div className="btn-row" style={{ marginTop: 20 }}>
         <button className="btn" onClick={onChat}>
           Open Chat
         </button>
@@ -282,7 +300,7 @@ function MatchCard({ c, onChat, onInvite }: { c: MatchedCandidate; onChat: () =>
 function TrialCard({ c, onChat }: { c: MatchedCandidate; onChat: () => void }) {
   return (
     <div className="card" style={{ padding: '24px 26px 22px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
         <div>
           <h3 className="t-h3" style={{ maxWidth: '20ch' }}>
             {TRIAL_OFFER.title}
@@ -379,7 +397,7 @@ function ProfileDrawer({ c, onClose, onMatch }: { c: ReviewCandidate; onClose: (
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 32 }}>
+        <div className="btn-row" style={{ marginTop: 32 }}>
           <button className="btn btn--neutral" onClick={onClose}>
             Close
           </button>
@@ -424,7 +442,7 @@ function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
         display: 'flex',
         justifyContent: 'center',
         gap: 70,
-        padding: '16px 0 18px',
+        padding: '16px 0 calc(env(safe-area-inset-bottom, 0px) + 18px)',
       }}
     >
       {items.map((it) => (

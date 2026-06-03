@@ -460,6 +460,202 @@ h3 {
   background: var(--faint);
 }
 
+/* ── Button rows (stack on mobile) ──────────────────────────── */
+.btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.btn-row > .btn,
+.btn-row > .btn--block {
+  width: 100%;
+}
+
+/* ── Chat ───────────────────────────────────────────────────── */
+.chat-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(7, 11, 22, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.chat {
+  width: 100%;
+  max-width: 440px;
+  height: min(620px, 86vh);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: 0 40px 90px -40px rgba(16, 24, 40, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.chat__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 16px 15px 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+.chat__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+}
+.chat__msg {
+  max-width: 78%;
+  padding: 9px 13px;
+  border-radius: 14px;
+  font-family: var(--font-sans-stack);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.chat__msg--them {
+  align-self: flex-start;
+  background: rgba(7, 11, 22, 0.05);
+  color: var(--ink);
+  border-bottom-left-radius: 5px;
+}
+.chat__msg--me {
+  align-self: flex-end;
+  background: var(--accent-ink);
+  color: #fff;
+  border-bottom-right-radius: 5px;
+}
+.chat__foot {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--hairline);
+}
+.chat__input {
+  flex: 1;
+  min-width: 0;
+  border: 1.5px solid var(--hairline);
+  border-radius: 10px;
+  padding: 0.7em 0.9em;
+  font-family: var(--font-sans-stack);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.chat__input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.chat__send {
+  flex: 0 0 auto;
+  width: 44px;
+  padding: 0;
+}
+
+/* ── How-it-works steps (hairline columns) ──────────────────── */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+.step {
+  padding: 8px 26px;
+  border-left: 1px solid var(--hairline);
+}
+.step:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+.step:last-child {
+  padding-right: 0;
+}
+.step__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  font-family: var(--font-serif-stack);
+  font-size: 1.15rem;
+  color: var(--accent-ink);
+  margin-bottom: 22px;
+}
+.step h3 {
+  font-size: 1.4rem;
+  margin-bottom: 10px;
+}
+.step p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ── Feature list (ticked) ──────────────────────────────────── */
+.feat {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.feat li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 1.02rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .steps {
+    grid-template-columns: 1fr 1fr;
+    gap: 40px 0;
+  }
+  .step {
+    padding: 8px 22px;
+  }
+  .step:nth-child(odd) {
+    border-left: none;
+    padding-left: 0;
+  }
+}
+@media (max-width: 600px) {
+  .steps {
+    grid-template-columns: 1fr;
+  }
+  .step {
+    border-left: none;
+    padding-left: 0;
+  }
+  .btn-row {
+    grid-template-columns: 1fr;
+  }
+  .btn--lg {
+    font-size: 0.98rem;
+    padding: 0.85em 1.3em;
+  }
+  .chat-scrim {
+    padding: 0;
+  }
+  .chat {
+    max-width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 0;
+  }
+}
+
 /* ── Motion ─────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: no-preference) {
   .reveal {

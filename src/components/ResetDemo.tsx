@@ -16,8 +16,8 @@ export default function ResetDemo() {
       }}
       style={{
         position: 'fixed',
-        top: 16,
-        right: 16,
+        top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+        right: 'calc(env(safe-area-inset-right, 0px) + 12px)',
         zIndex: 50,
         display: 'inline-flex',
         alignItems: 'center',

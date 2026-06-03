@@ -4,12 +4,15 @@ import { useMemo, useState } from 'react';
 import { useForm } from '@/context/FormContext';
 import { COMPANIES, type Company } from '@/lib/companies';
 import { Heart, Cross, Cards, MapPin, Users, Spark } from '@/components/Icons';
+import ChatModal from '@/components/ChatModal';
+import { useChat } from '@/hooks/useChat';
 
 type Tab = 'swipe' | 'matches';
 
 export default function DiscoverPage() {
   const { liked, passed, update } = useForm();
   const [tab, setTab] = useState<Tab>('swipe');
+  const { peer, messages, openChat, closeChat, send } = useChat();
 
   const deck = useMemo(
     () => COMPANIES.filter((c) => !liked.includes(c.id) && !passed.includes(c.id)),
@@ -39,10 +42,16 @@ export default function DiscoverPage() {
             <EmptyDeck count={matched.length} onSeeMatches={() => setTab('matches')} />
           )
         ) : (
-          <MatchesList companies={matched} onBack={() => setTab('swipe')} hasDeck={!!current} />
+          <MatchesList
+            companies={matched}
+            onBack={() => setTab('swipe')}
+            hasDeck={!!current}
+            onChat={(c) => openChat({ id: c.id, name: c.name, subtitle: c.tagline })}
+          />
         )}
       </section>
 
+      <ChatModal peer={peer} messages={messages} onSend={send} onClose={closeChat} />
       <BottomNav tab={tab} setTab={setTab} matchCount={matched.length} />
     </main>
   );
@@ -151,7 +160,17 @@ function EmptyDeck({ count, onSeeMatches }: { count: number; onSeeMatches: () =>
   );
 }
 
-function MatchesList({ companies, onBack, hasDeck }: { companies: Company[]; onBack: () => void; hasDeck: boolean }) {
+function MatchesList({
+  companies,
+  onBack,
+  hasDeck,
+  onChat,
+}: {
+  companies: Company[];
+  onBack: () => void;
+  hasDeck: boolean;
+  onChat: (c: Company) => void;
+}) {
   if (companies.length === 0) {
     return (
       <div className="card" style={{ padding: '48px 34px', textAlign: 'center' }}>
@@ -172,9 +191,9 @@ function MatchesList({ companies, onBack, hasDeck }: { companies: Company[]; onB
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {companies.map((c) => (
         <div key={c.id} className="card" style={{ padding: '22px 24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <h3 className="t-h3">{c.name}</h3>
-            <span className="t-label" style={{ color: 'var(--accent-ink)' }}>
+            <span className="t-label" style={{ color: 'var(--accent-ink)', flex: '0 0 auto' }}>
               Matched
             </span>
           </div>
@@ -182,6 +201,9 @@ function MatchesList({ companies, onBack, hasDeck }: { companies: Company[]; onB
             {c.tagline}
           </p>
           <p style={{ marginTop: 12, fontSize: '0.92rem', fontWeight: 600, color: 'var(--accent-ink)' }}>{c.trial}</p>
+          <button className="btn btn--primary btn--block" style={{ marginTop: 16 }} onClick={() => onChat(c)}>
+            Open Chat
+          </button>
         </div>
       ))}
     </div>
@@ -203,7 +225,7 @@ function BottomNav({ tab, setTab, matchCount }: { tab: Tab; setTab: (t: Tab) => 
         display: 'flex',
         justifyContent: 'center',
         gap: 80,
-        padding: '12px 0 16px',
+        padding: '12px 0 calc(env(safe-area-inset-bottom, 0px) + 16px)',
       }}
     >
       <NavItem active={tab === 'swipe'} onClick={() => setTab('swipe')} label="Swipe">
