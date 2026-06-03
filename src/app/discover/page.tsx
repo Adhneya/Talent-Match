@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from '@/context/FormContext';
 import { COMPANIES, type Company } from '@/lib/companies';
 import { Heart, Cross, Cards, MapPin, Users, Spark } from '@/components/Icons';
@@ -37,7 +37,7 @@ export default function DiscoverPage() {
 
         {tab === 'swipe' ? (
           current ? (
-            <SwipeCard company={current} onDecide={decide} />
+            <SwipeCard key={current.id} company={current} onDecide={decide} />
           ) : (
             <EmptyDeck count={matched.length} onSeeMatches={() => setTab('matches')} />
           )
@@ -57,9 +57,93 @@ export default function DiscoverPage() {
   );
 }
 
+const SWIPE_THRESHOLD = 110; // px past which a release commits
+const FLY_OUT = 600; // px the card travels off-screen
+
 function SwipeCard({ company, onDecide }: { company: Company; onDecide: (a: 'like' | 'pass') => void }) {
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [exit, setExit] = useState<null | 'like' | 'pass'>(null);
+  const startX = useRef(0);
+  const decided = useRef(false);
+
+  const commit = (action: 'like' | 'pass') => {
+    if (exit || decided.current) return;
+    setDragging(false);
+    setExit(action);
+  };
+
+  // Desktop keyboard support: ← pass, → match.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'ArrowLeft') commit('pass');
+      else if (e.key === 'ArrowRight') commit('like');
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exit]);
+
+  function onPointerDown(e: React.PointerEvent) {
+    if (exit) return;
+    if ((e.target as HTMLElement).closest('button')) return; // let buttons fire their own click
+    setDragging(true);
+    startX.current = e.clientX;
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    if (!dragging) return;
+    setDx(e.clientX - startX.current);
+  }
+  function onPointerUp() {
+    if (!dragging) return;
+    setDragging(false);
+    if (dx > SWIPE_THRESHOLD) commit('like');
+    else if (dx < -SWIPE_THRESHOLD) commit('pass');
+    else setDx(0); // spring back
+  }
+
+  function onTransitionEnd(e: React.TransitionEvent) {
+    if (exit && !decided.current && e.propertyName === 'transform') {
+      decided.current = true;
+      onDecide(exit);
+    }
+  }
+
+  const tx = exit ? (exit === 'like' ? FLY_OUT : -FLY_OUT) : dx;
+  const rot = Math.max(-14, Math.min(14, tx * 0.05));
+  const opacity = exit ? 0 : 1 - Math.min(Math.abs(dx) / (FLY_OUT * 1.4), 0.25);
+  const transition = dragging
+    ? 'none'
+    : 'transform 360ms cubic-bezier(0.22,0.61,0.36,1), opacity 360ms ease';
+
+  const likeOpacity = Math.max(0, Math.min(1, dx / SWIPE_THRESHOLD));
+  const passOpacity = Math.max(0, Math.min(1, -dx / SWIPE_THRESHOLD));
+
   return (
-    <div className="card reveal" style={{ padding: '34px 34px 26px' }}>
+    <div
+      className={exit ? 'card' : 'card reveal'}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onTransitionEnd={onTransitionEnd}
+      style={{
+        position: 'relative',
+        padding: '34px 34px 26px',
+        transform: `translateX(${tx}px) rotate(${rot}deg)`,
+        opacity,
+        transition,
+        cursor: dragging ? 'grabbing' : 'grab',
+        touchAction: 'pan-y',
+        userSelect: 'none',
+        willChange: 'transform',
+      }}
+    >
+      {/* Drag overlays */}
+      <SwipeBadge label="MATCH" tone="like" opacity={exit === 'like' ? 1 : likeOpacity} side="left" />
+      <SwipeBadge label="PASS" tone="pass" opacity={exit === 'pass' ? 1 : passOpacity} side="right" />
+
       <h2 className="t-h1">{company.name}</h2>
       <p className="t-lead" style={{ marginTop: 6 }}>
         {company.tagline}
@@ -94,13 +178,56 @@ function SwipeCard({ company, onDecide }: { company: Company; onDecide: (a: 'lik
       </p>
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: 28, marginTop: 30 }}>
-        <RoundBtn label="Pass" variant="pass" onClick={() => onDecide('pass')}>
+        <RoundBtn label="Pass" variant="pass" onClick={() => commit('pass')}>
           <Cross />
         </RoundBtn>
-        <RoundBtn label="Like" variant="like" onClick={() => onDecide('like')}>
+        <RoundBtn label="Like" variant="like" onClick={() => commit('like')}>
           <Heart size={26} />
         </RoundBtn>
       </div>
+
+      <p className="t-fine" style={{ textAlign: 'center', marginTop: 16, color: 'var(--faint)' }}>
+        Swipe or drag · ← pass · → match
+      </p>
+    </div>
+  );
+}
+
+function SwipeBadge({
+  label,
+  tone,
+  opacity,
+  side,
+}: {
+  label: string;
+  tone: 'like' | 'pass';
+  opacity: number;
+  side: 'left' | 'right';
+}) {
+  const like = tone === 'like';
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        top: 24,
+        left: side === 'left' ? 24 : undefined,
+        right: side === 'right' ? 24 : undefined,
+        padding: '6px 14px',
+        borderRadius: 8,
+        border: `2.5px solid ${like ? 'var(--accent-ink)' : 'var(--danger)'}`,
+        color: like ? 'var(--accent-ink)' : 'var(--danger)',
+        fontWeight: 800,
+        fontSize: '1.1rem',
+        letterSpacing: '0.08em',
+        transform: `rotate(${like ? -12 : 12}deg)`,
+        opacity,
+        transition: 'opacity 120ms ease',
+        pointerEvents: 'none',
+        background: 'rgba(255,255,255,0.7)',
+      }}
+    >
+      {label}
     </div>
   );
 }
