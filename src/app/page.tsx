@@ -31,9 +31,7 @@ export default function LandingPage() {
       <section className="col reveal" style={{ maxWidth: 540, padding: '40px 0 100px', textAlign: 'center' }}>
         <h1 className="t-display">
           Get hired as a PM through real work,{' '}
-          <span className="sans" style={{ fontWeight: 700 }}>
-            not résumés.
-          </span>
+          <span style={{ fontWeight: 700 }}>not résumés.</span>
         </h1>
         <p className="t-lead" style={{ marginTop: 22 }}>
           Swipe on companies. Match. Do a paid trial. Get the job.

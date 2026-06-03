@@ -24,7 +24,7 @@ const sans = Inter({
 
 const serif = Newsreader({
   subsets: ['latin'],
-  weight: ['400', '500'],
+  weight: ['400', '500', '700'], // 700 = real bold serif for the hero accent
   style: ['normal', 'italic'],
   display: 'swap',
   variable: '--font-newsreader',
